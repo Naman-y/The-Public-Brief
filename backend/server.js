@@ -362,6 +362,8 @@ app.patch("/api/admin/articles/:id/review", adminAuth, async (req, res) => {
   res.json(article);
 });
 
+
+console.log("MONGO_URI =", process.env.MONGO_URI);
 mongoose
   .connect(process.env.MONGO_URI || "mongodb+srv://namanrao016_db_user:thepublicbrief@123@cluster0.19ytnua.mongodb.net/?appName=Cluster0")
   .then(async () => {
