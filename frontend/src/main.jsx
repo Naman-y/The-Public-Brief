@@ -1,9 +1,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BookOpen, CheckCircle, LogOut, Menu, PenLine, ShieldCheck, UserRound, X, XCircle } from "lucide-react";
+import { BookOpen, CheckCircle, Edit3, LogOut, Menu, PenLine, ShieldCheck, UserRound, X, XCircle } from "lucide-react";
 import "./styles.css";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+const CATEGORIES = [
+  "BREAKING NEWS",
+  "CULTURE",
+  "FEATURES",
+  "NEWS",
+  "OPINION",
+  "PHOTO",
+  "POLITICS",
+  "SOCIETY",
+  "INTERNATIONAL",
+  "NATIONAL",
+];
 
 const seedArticles = [
   {
@@ -15,6 +28,7 @@ const seedArticles = [
     content:
       "The best public work still begins with patient facts. In an age of fast reactions, policy writing needs to slow the room down, separate signal from noise, and keep citizens close to the evidence that shapes decisions.",
     createdAt: new Date().toISOString(),
+    status: "published",
     author: { _id: "seed-author-1", name: "Editorial Desk", title: "Founding Editor", avatar: "" }
   },
   {
@@ -26,6 +40,7 @@ const seedArticles = [
     content:
       "A city cannot fix what it cannot describe. Better local journalism links public data with street-level reporting, giving residents a shared map for housing, transport, health, and climate choices.",
     createdAt: new Date(Date.now() - 86400000).toISOString(),
+    status: "published",
     author: { _id: "seed-author-2", name: "Mira Sen", title: "Civic Affairs Analyst", avatar: "" }
   }
 ];
@@ -47,6 +62,16 @@ async function api(path, options = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || "Something went wrong");
   return data;
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    published: { label: "Published", cls: "badge-published" },
+    pending: { label: "Pending Review", cls: "badge-pending" },
+    rejected: { label: "Rejected", cls: "badge-rejected" },
+  };
+  const s = map[status] || map["pending"];
+  return <span className={`status-badge ${s.cls}`}><span className="badge-dot" />{s.label}</span>;
 }
 
 function App() {
@@ -115,6 +140,7 @@ function App() {
         {route === "/register" && <Auth mode="register" onDone={saveSession} switchMode={() => navigate("/login")} />}
         {route === "/login" && <Auth mode="login" onDone={saveSession} switchMode={() => navigate("/register")} />}
         {route === "/studio" && <Studio user={user} setUser={setUser} articles={articles} refresh={refreshContent} navigate={navigate} />}
+        {route === "/studio/new" && <NewPost user={user} refresh={refreshContent} navigate={navigate} />}
         {route === "/admin" && <AdminDashboard user={user} refreshPublic={refreshContent} navigate={navigate} />}
         {route === "/about" && <StaticPage title="About The Public Brief" text="The Public Brief is a member-led journal for civic, political, cultural, and international writing. It is built for contributors who want careful arguments, strong reporting, and a composed place to publish." />}
         {route === "/contact" && <StaticPage title="Contact" text="For collaborations, editorial queries, and corrections, write to desk@thepublicbrief.example. Members can register and begin publishing from the writer studio." />}
@@ -155,7 +181,7 @@ function Header({ navigate, route, user, logout, menuOpen, setMenuOpen }) {
         {user ? (
           <>
             {user.role === "admin" && <button className="desk-link" onClick={() => navigate("/admin")}><ShieldCheck size={16} /> Admin</button>}
-            <button className="desk-link" onClick={() => navigate("/studio")}><PenLine size={16} /> Write</button>
+            <button className="desk-link" onClick={() => navigate("/studio")}><PenLine size={16} /> My Posts</button>
             <button className="icon-button" onClick={logout} aria-label="Log out"><LogOut size={18} /></button>
           </>
         ) : (
@@ -300,13 +326,18 @@ function ArticleListItem({ article, navigate }) {
   );
 }
 
+/* ─────────────────────────────────────────────
+   AUTH — simplified: name + email + password
+───────────────────────────────────────────── */
 function Auth({ mode, onDone, switchMode }) {
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const isRegister = mode === "register";
 
   async function submit(e) {
     e.preventDefault();
     setError("");
+    setBusy(true);
     const form = new FormData(e.currentTarget);
     try {
       const payload = isRegister
@@ -315,6 +346,8 @@ function Auth({ mode, onDone, switchMode }) {
       onDone(payload);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -322,21 +355,15 @@ function Auth({ mode, onDone, switchMode }) {
     <section className="auth-page">
       <form className="auth-panel" onSubmit={submit}>
         <p className="kicker">{isRegister ? "Member Registration" : "Member Login"}</p>
-        <h1>{isRegister ? "Start writing for The Public Brief" : "Welcome back"}</h1>
-        {isRegister && <input name="name" placeholder="Full name" required />}
-        <input name="email" type="email" placeholder="Email address" required />
-        <input name="password" type="password" placeholder="Password" required />
-        {isRegister && (
-          <>
-            <input name="title" placeholder="Position / Title" />
-            <textarea name="bio" placeholder="Short bio" rows="4" />
-            <label className="file-label">Profile Image<input name="avatar" type="file" accept="image/*" /></label>
-            <input name="twitter" placeholder="Twitter URL (optional)" />
-            <input name="linkedin" placeholder="LinkedIn URL (optional)" />
-          </>
-        )}
+        <h1>{isRegister ? "Create your account" : "Welcome back"}</h1>
+        <p className="auth-subtitle">{isRegister ? "Join The Public Brief and start writing." : "Log in to access your writer studio."}</p>
+
+        {isRegister && <input id="reg-name" name="name" placeholder="Full name" required autoComplete="name" />}
+        <input id="auth-email" name="email" type="email" placeholder="Email address" required autoComplete="email" />
+        <input id="auth-password" name="password" type="password" placeholder="Password" required autoComplete={isRegister ? "new-password" : "current-password"} />
+
         {error && <p className="form-error">{error}</p>}
-        <button>{isRegister ? "Register & Open Studio" : "Login"}</button>
+        <button id="auth-submit" disabled={busy}>{busy ? "Please wait…" : isRegister ? "Create Account" : "Login"}</button>
         <button type="button" className="text-button" onClick={switchMode}>
           {isRegister ? "Already a member? Login" : "Need an account? Register"}
         </button>
@@ -345,13 +372,15 @@ function Auth({ mode, onDone, switchMode }) {
   );
 }
 
+/* ─────────────────────────────────────────────
+   STUDIO — My Posts table + profile
+───────────────────────────────────────────── */
 function Studio({ user, setUser, articles, refresh, navigate }) {
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [submissions, setSubmissions] = useState([]);
   const [profileError, setProfileError] = useState("");
   const [profileNotice, setProfileNotice] = useState("");
   const [profileBusy, setProfileBusy] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (user) loadSubmissions();
@@ -370,27 +399,6 @@ function Studio({ user, setUser, articles, refresh, navigate }) {
     );
   }
 
-  async function submit(e) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    setBusy(true);
-    setError("");
-    try {
-      await api("/api/articles", { method: "POST", body: new FormData(form) });
-      form.reset();
-      await Promise.all([refresh(), loadSubmissions()]);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove(id) {
-    await api(`/api/articles/${id}`, { method: "DELETE" });
-    await Promise.all([refresh(), loadSubmissions()]);
-  }
-
   async function loadSubmissions() {
     try {
       setSubmissions(await api("/api/me/articles"));
@@ -399,7 +407,11 @@ function Studio({ user, setUser, articles, refresh, navigate }) {
     }
   }
 
-  const mine = submissions.length ? submissions : articles.filter((article) => article.author?._id === user._id);
+  async function remove(id) {
+    if (!window.confirm("Delete this article?")) return;
+    await api(`/api/articles/${id}`, { method: "DELETE" });
+    await Promise.all([refresh(), loadSubmissions()]);
+  }
 
   async function updateProfile(e) {
     e.preventDefault();
@@ -420,25 +432,87 @@ function Studio({ user, setUser, articles, refresh, navigate }) {
     }
   }
 
+  const mine = submissions.length ? submissions : articles.filter((a) => a.author?._id === user._id);
+  const publishedCount = mine.filter((a) => a.status === "published").length;
+  const pendingCount = mine.filter((a) => a.status === "pending").length;
+
   return (
     <section className="studio">
-      <div className="studio-left">
-        <div className="studio-form">
-          <p className="kicker">Writer Studio</p>
-          <h1>Add Article</h1>
-          <form onSubmit={submit}>
-            <input name="category" placeholder="Category (e.g., TECHNOLOGY)" required />
-            <input name="title" placeholder="Title" required />
-            <textarea name="excerpt" placeholder="Brief excerpt" rows="3" required />
-            <textarea name="content" placeholder="Write the full article..." rows="10" required />
-            <label className="file-label">Featured Image<input name="featuredImage" type="file" accept="image/*" /></label>
-            {error && <p className="form-error">{error}</p>}
-            <button disabled={busy}>{busy ? "Submitting..." : "Submit for Review"}</button>
-          </form>
+      {/* LEFT: Posts List */}
+      <div className="studio-main">
+        {/* Stats row */}
+        <div className="studio-stats">
+          <div className="stat-card">
+            <span className="stat-num">{mine.length}</span>
+            <span className="stat-label">Total Articles</span>
+          </div>
+          <div className="stat-card stat-green">
+            <span className="stat-num">{publishedCount}</span>
+            <span className="stat-label">Published</span>
+          </div>
+          <div className="stat-card stat-amber">
+            <span className="stat-num">{pendingCount}</span>
+            <span className="stat-label">Pending Review</span>
+          </div>
         </div>
+
+        {/* Posts header */}
+        <div className="posts-header">
+          <div>
+            <p className="kicker">Writer Studio</p>
+            <h2>My Posts</h2>
+          </div>
+          <button id="new-post-btn" className="new-post-btn" onClick={() => navigate("/studio/new")}>
+            <PenLine size={16} /> Add New Post
+          </button>
+        </div>
+
+        {error && <p className="form-error">{error}</p>}
+
+        {/* Posts table */}
+        {mine.length === 0 ? (
+          <div className="empty-posts">
+            <BookOpen size={48} />
+            <p>You haven't written anything yet.</p>
+            <button onClick={() => navigate("/studio/new")}>Write your first article</button>
+          </div>
+        ) : (
+          <div className="posts-table">
+            <div className="posts-table-head">
+              <span>Title</span>
+              <span>Category</span>
+              <span>Status</span>
+              <span>Date</span>
+              <span></span>
+            </div>
+            {mine.map((article) => (
+              <div className="posts-table-row" key={article._id}>
+                <div className="post-title-cell">
+                  {article.status === "published"
+                    ? <button className="post-title-link" onClick={() => navigate(`/article/${article.slug}`)}>{article.title}</button>
+                    : <span className="post-title-plain">{article.title}</span>
+                  }
+                  {article.rejectionReason && (
+                    <small className="rejection-note">Reason: {article.rejectionReason}</small>
+                  )}
+                </div>
+                <span className="post-cat-cell">{article.category}</span>
+                <span className="post-status-cell"><StatusBadge status={article.status || "pending"} /></span>
+                <span className="post-date-cell">{new Date(article.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                <span className="post-actions-cell">
+                  <button className="row-delete-btn" title="Delete" onClick={() => remove(article._id)}><XCircle size={16} /></button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT: Profile panel */}
+      <div className="studio-sidebar">
         <div className="profile-panel">
           <p className="kicker">Profile</p>
-          <h2>Edit profile image</h2>
+          <h2>Edit Profile</h2>
           <form onSubmit={updateProfile}>
             <div className="profile-preview-row">
               <Avatar author={user} />
@@ -451,33 +525,222 @@ function Studio({ user, setUser, articles, refresh, navigate }) {
             <input name="linkedin" defaultValue={user.linkedin || ""} placeholder="LinkedIn URL (optional)" />
             {profileError && <p className="form-error">{profileError}</p>}
             {profileNotice && <p className="form-success">{profileNotice}</p>}
-            <button disabled={profileBusy}>{profileBusy ? "Saving..." : "Save Profile"}</button>
+            <button disabled={profileBusy}>{profileBusy ? "Saving…" : "Save Profile"}</button>
           </form>
         </div>
-      </div>
-      <div className="current-list">
-        <p className="kicker">My Submissions</p>
-        <h2>{user.name}</h2>
-        {mine.length ? mine.map((article) => (
-          <div className="manage-row" key={article._id}>
-            <button onClick={() => article.status === "published" && navigate(`/article/${article.slug}`)}>
-              <strong>{article.title}</strong>
-              <span>{article.category} / {article.status || "published"}</span>
-              {article.rejectionReason && <small>{article.rejectionReason}</small>}
-            </button>
-            <button className="danger" onClick={() => remove(article._id)}>Delete</button>
-          </div>
-        )) : <p className="empty">Submit your first brief from the form. An admin will publish it after review.</p>}
       </div>
     </section>
   );
 }
 
+/* ─────────────────────────────────────────────
+   NEW POST PAGE — like WordPress Add Post
+───────────────────────────────────────────── */
+function NewPost({ user, refresh, navigate }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [excerpt, setExcerpt] = useState("");
+  const [category, setCategory] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  if (!user) {
+    return (
+      <section className="auth-page">
+        <div className="auth-panel">
+          <p className="kicker">Login Required</p>
+          <h1>Please log in to write.</h1>
+          <button onClick={() => navigate("/login")}>Login</button>
+        </div>
+      </section>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <section className="auth-page">
+        <div className="auth-panel submitted-panel">
+          <div className="submitted-icon"><CheckCircle size={56} /></div>
+          <p className="kicker">Submitted Successfully</p>
+          <h1>Article sent for review</h1>
+          <p>Your article has been submitted and is now <strong>Pending Review</strong>. The admin will review and publish it.</p>
+          <button onClick={() => navigate("/studio")}>View My Posts</button>
+          <button className="text-button" onClick={() => { setSubmitted(false); setTitle(""); setContent(""); setExcerpt(""); setCategory(""); }}>Write Another</button>
+        </div>
+      </section>
+    );
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    const form = new FormData(e.currentTarget);
+    try {
+      await api("/api/articles", { method: "POST", body: form });
+      await refresh();
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+
+  return (
+    <section className="new-post-page">
+      <form id="new-post-form" className="new-post-layout" onSubmit={submit}>
+        {/* ── Main editor area ── */}
+        <div className="post-editor">
+          <div className="editor-topbar">
+            <p className="kicker">Writer Studio</p>
+            <h2>Add New Post</h2>
+          </div>
+
+          <input
+            id="post-title"
+            name="title"
+            className="post-title-input"
+            placeholder="Add title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+          />
+
+          <div className="editor-toolbar">
+            <span className="toolbar-label">Body</span>
+            <span className="word-count">Word count: {wordCount}</span>
+          </div>
+
+          <textarea
+            id="post-content"
+            name="content"
+            className="post-content-area"
+            placeholder="Write your article here…"
+            rows="18"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            required
+          />
+
+          <div className="editor-section">
+            <label className="editor-label">Excerpt</label>
+            <textarea
+              id="post-excerpt"
+              name="excerpt"
+              className="post-excerpt-area"
+              placeholder="Brief summary of the article…"
+              rows="3"
+              value={excerpt}
+              onChange={(e) => setExcerpt(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="editor-section">
+            <label className="editor-label">Featured Image</label>
+            <label className="file-label-styled">
+              <input name="featuredImage" type="file" accept="image/*" />
+              <span>Choose image…</span>
+            </label>
+          </div>
+
+          {error && <p className="form-error">{error}</p>}
+        </div>
+
+        {/* ── Right sidebar ── */}
+        <div className="post-sidebar">
+          {/* Publish panel */}
+          <div className="publish-panel">
+            <div className="publish-panel-head">
+              <span>Publish</span>
+            </div>
+            <div className="publish-panel-body">
+              <div className="publish-meta-row">
+                <span className="publish-meta-label">Status:</span>
+                <span className="publish-meta-value draft-chip">Draft</span>
+              </div>
+              <div className="publish-meta-row">
+                <span className="publish-meta-label">Visibility:</span>
+                <span className="publish-meta-value">Public</span>
+              </div>
+              <div className="publish-meta-row">
+                <span className="publish-meta-label">Author:</span>
+                <span className="publish-meta-value">{user.name}</span>
+              </div>
+              <div className="publish-notice">
+                <ShieldCheck size={14} />
+                <span>Admin approval required to publish</span>
+              </div>
+            </div>
+            <div className="publish-panel-footer">
+              <button
+                id="submit-review-btn"
+                type="submit"
+                className="submit-review-btn"
+                disabled={busy}
+              >
+                {busy ? "Submitting…" : "Submit for Review"}
+              </button>
+              <button
+                type="button"
+                className="save-draft-btn"
+                onClick={() => navigate("/studio")}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          {/* Categories panel */}
+          <div className="sidebar-panel">
+            <div className="sidebar-panel-head">
+              <span>Category / Domain</span>
+            </div>
+            <div className="sidebar-panel-body">
+              <select
+                id="post-category"
+                name="category"
+                className="category-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+              >
+                <option value="" disabled>Select a category…</option>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>{cat.charAt(0) + cat.slice(1).toLowerCase()}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Tags/SEO note */}
+          <div className="sidebar-panel">
+            <div className="sidebar-panel-head">
+              <span>Note</span>
+            </div>
+            <div className="sidebar-panel-body sidebar-note">
+              <p>Articles submitted here go directly to the editor's review queue. Only <strong>Kaifullah Khan (Admin)</strong> can approve and publish your article.</p>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   ADMIN DASHBOARD
+───────────────────────────────────────────── */
 function AdminDashboard({ user, refreshPublic, navigate }) {
   const [articles, setArticles] = useState([]);
   const [status, setStatus] = useState("pending");
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     if (user?.role === "admin") loadArticles();
@@ -521,39 +784,149 @@ function AdminDashboard({ user, refreshPublic, navigate }) {
     );
   }
 
+  const tabs = [
+    { key: "pending", label: "Pending" },
+    { key: "published", label: "Published" },
+    { key: "rejected", label: "Rejected" },
+  ];
+
   return (
     <section className="section-shell admin-page">
-      <div className="section-title">
+      <div className="admin-header">
         <div>
-          <p className="kicker">Admin Review</p>
-          <h2>Verify member articles</h2>
-        </div>
-        <div className="category-row">
-          {["pending", "published", "rejected"].map((item) => (
-            <button key={item} className={status === item ? "selected" : ""} onClick={() => setStatus(item)}>{item}</button>
-          ))}
+          <p className="kicker">Admin Dashboard</p>
+          <h2>Verify Member Articles</h2>
+          <p className="admin-greeting">Welcome, {user.name} — you have exclusive publishing rights.</p>
         </div>
       </div>
+
+      <div className="admin-tabs">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            className={`admin-tab ${status === t.key ? "admin-tab-active" : ""}`}
+            onClick={() => { setStatus(t.key); setEditingId(null); }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {error && <p className="form-error">{error}</p>}
+
       <div className="review-list">
         {articles.length ? articles.map((article) => (
-          <article className="review-item" key={article._id}>
-            <div>
-              <span>{article.category} / {article.status}</span>
-              <h3>{article.title}</h3>
-              <p>{article.excerpt}</p>
-              <p className="review-body">{article.content}</p>
-              <small>By {article.author?.name || "Member"} ({article.author?.email || "no email"})</small>
-              {article.rejectionReason && <small>Rejected reason: {article.rejectionReason}</small>}
-            </div>
-            <div className="review-actions">
-              <button disabled={busyId === article._id} onClick={() => review(article, "publish")}><CheckCircle size={18} /> Publish</button>
-              <button className="danger" disabled={busyId === article._id} onClick={() => review(article, "reject")}><XCircle size={18} /> Reject</button>
-            </div>
-          </article>
+          editingId === article._id
+            ? <AdminEditForm
+                key={article._id}
+                article={article}
+                onCancel={() => setEditingId(null)}
+                onSave={async (form) => {
+                  setBusyId(article._id);
+                  try {
+                    await api(`/api/admin/articles/${article._id}/edit`, { method: "PUT", body: form });
+                    await Promise.all([loadArticles(), refreshPublic()]);
+                    setEditingId(null);
+                  } catch (err) {
+                    setError(err.message);
+                  } finally {
+                    setBusyId("");
+                  }
+                }}
+                busy={busyId === article._id}
+              />
+            : <AdminReviewCard
+                key={article._id}
+                article={article}
+                busy={busyId === article._id}
+                status={status}
+                onEdit={() => setEditingId(article._id)}
+                onPublish={() => review(article, "publish")}
+                onReject={() => review(article, "reject")}
+              />
         )) : <p className="empty">No {status} articles right now.</p>}
       </div>
     </section>
+  );
+}
+
+function AdminReviewCard({ article, busy, status, onEdit, onPublish, onReject }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <article className="review-item">
+      <div className="review-item-main">
+        <div className="review-meta">
+          <span className="review-cat">{article.category}</span>
+          <StatusBadge status={article.status} />
+        </div>
+        <h3>{article.title}</h3>
+        <p className="review-excerpt">{article.excerpt}</p>
+        <button className="expand-toggle" onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Hide content ▲" : "Show full content ▼"}
+        </button>
+        {expanded && <p className="review-body">{article.content}</p>}
+        <small className="review-author">By {article.author?.name || "Member"} ({article.author?.email || "no email"})</small>
+        {article.rejectionReason && <small className="rejection-note">Rejection reason: {article.rejectionReason}</small>}
+        <small className="review-date">{new Date(article.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</small>
+      </div>
+      <div className="review-actions">
+        <button className="action-edit-btn" disabled={busy} onClick={onEdit}><Edit3 size={16} /> Edit</button>
+        {status !== "published" && (
+          <button className="action-publish-btn" disabled={busy} onClick={onPublish}><CheckCircle size={16} /> Publish</button>
+        )}
+        {status !== "rejected" && (
+          <button className="action-reject-btn" disabled={busy} onClick={onReject}><XCircle size={16} /> Reject</button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function AdminEditForm({ article, onCancel, onSave, busy }) {
+  const [title, setTitle] = useState(article.title);
+  const [category, setCategory] = useState(article.category);
+  const [excerpt, setExcerpt] = useState(article.excerpt);
+  const [content, setContent] = useState(article.content);
+
+  function submit(e) {
+    e.preventDefault();
+    const form = new FormData();
+    form.append("title", title);
+    form.append("category", category);
+    form.append("excerpt", excerpt);
+    form.append("content", content);
+    onSave(form);
+  }
+
+  return (
+    <article className="review-item admin-edit-form">
+      <form onSubmit={submit} style={{ width: "100%" }}>
+        <p className="kicker">Editing Article</p>
+        <div className="admin-edit-grid">
+          <div>
+            <label className="editor-label">Title</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </div>
+          <div>
+            <label className="editor-label">Category</label>
+            <select className="category-select" value={category} onChange={(e) => setCategory(e.target.value)} required>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat.charAt(0) + cat.slice(1).toLowerCase()}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <label className="editor-label">Excerpt</label>
+        <textarea rows="3" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} required />
+        <label className="editor-label">Content</label>
+        <textarea rows="12" value={content} onChange={(e) => setContent(e.target.value)} required />
+        <div className="admin-edit-actions">
+          <button type="submit" className="action-publish-btn" disabled={busy}>{busy ? "Saving…" : "Save Changes"}</button>
+          <button type="button" className="save-draft-btn" onClick={onCancel}>Cancel</button>
+        </div>
+      </form>
+    </article>
   );
 }
 
