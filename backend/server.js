@@ -363,7 +363,7 @@ app.patch("/api/admin/articles/:id/review", adminAuth, async (req, res) => {
 });
 
 mongoose
-  .connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/the-public-brief")
+  .connect(process.env.MONGO_URI || "mongodb+srv://namanrao016_db_user:thepublicbrief@123@cluster0.19ytnua.mongodb.net/?appName=Cluster0")
   .then(async () => {
     await ensureAdminUser();
     app.listen(PORT, () => console.log(`The Public Brief API running on http://localhost:${PORT}`));
