@@ -324,6 +324,25 @@ app.get("/api/admin/articles", adminAuth, async (req, res) => {
   res.json(articles);
 });
 
+app.put("/api/admin/articles/:id/edit", adminAuth, upload.single("featuredImage"), async (req, res) => {
+  try {
+    const article = await Article.findById(req.params.id);
+    if (!article) return res.status(404).json({ message: "Article not found." });
+
+    ["title", "category", "excerpt", "content"].forEach((field) => {
+      if (req.body[field] !== undefined) article[field] = req.body[field];
+    });
+    if (req.body.title) article.slug = await uniqueSlug(req.body.title);
+    if (req.file) article.featuredImage = fileUrl(req, req.file);
+
+    await article.save();
+    await article.populate("author", "name title avatar email");
+    res.json(article);
+  } catch (error) {
+    res.status(500).json({ message: error.message || "Article could not be updated." });
+  }
+});
+
 app.patch("/api/admin/articles/:id/review", adminAuth, async (req, res) => {
   const { action, rejectionReason } = req.body;
   if (!["publish", "reject"].includes(action)) {
