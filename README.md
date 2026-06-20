@@ -40,6 +40,28 @@ The API runs on:
 http://localhost:5000
 ```
 
+## Production environment
+
+Set these environment variables in the deployment dashboards. Do not commit
+production secrets to the repository.
+
+Frontend (Vercel):
+
+```text
+VITE_API_URL=https://your-render-service.onrender.com
+```
+
+Backend (Render):
+
+```text
+MONGO_URI=mongodb+srv://...
+JWT_SECRET=...
+CLIENT_URL=https://www.thepublicbrief.in,https://thepublicbrief.in
+```
+
+Redeploy both services after changing their environment variables. The frontend
+production build intentionally has no localhost fallback.
+
 ## Main Features
 
 - Member registration with profile image, title, bio, and social links

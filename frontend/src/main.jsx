@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import { BookOpen, CheckCircle, Edit3, LogOut, Menu, PenLine, ShieldCheck, UserRound, X, XCircle } from "lucide-react";
 import "./styles.css";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const configuredApiUrl = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+const API = configuredApiUrl || (import.meta.env.DEV ? "http://localhost:5000" : "");
 
 const CATEGORIES = [
   "BREAKING NEWS",
@@ -55,6 +56,9 @@ function initials(name = "PB") {
 }
 
 async function api(path, options = {}) {
+  if (!API) {
+    throw new Error("The production API URL is not configured. Set VITE_API_URL and redeploy the frontend.");
+  }
   const token = localStorage.getItem("tpb_token");
   const headers = options.body instanceof FormData ? {} : { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
